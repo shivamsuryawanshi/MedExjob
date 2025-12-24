@@ -1,4 +1,5 @@
-import { Plus, Briefcase, Users, Eye, CheckCircle, XCircle, Calendar, ArrowLeft, Edit, Trash2, AlertTriangle } from 'lucide-react';
+// AI assisted development
+import { Plus, Briefcase, Users, Eye, CheckCircle, XCircle, Calendar, ArrowLeft, Edit, Trash2, AlertTriangle, LogOut } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -11,35 +12,40 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
-import { mockJobs, mockApplications, mockEmployer } from '../data/mockData';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchEmployer } from '../api/employers';
 import { EmployerResponse } from '../api/employers';
 import { Alert, AlertDescription } from './ui/alert';
+import { fetchJobs } from '../api/jobs';
+import { fetchApplications, ApplicationResponse } from '../api/applications';
 
 interface EmployerDashboardProps {
   onNavigate: (page: string) => void;
 }
 
 export function EmployerDashboard({ onNavigate }: EmployerDashboardProps) {
-  const { user, token } = useAuth();
-  const [myJobs, setMyJobs] = useState(mockJobs.filter(job => job.employerId === mockEmployer.id));
-  const [myApplications] = useState(mockApplications.filter(app =>
-    myJobs.some(job => job.id === app.jobId)
-  ));
+  const { user, token, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    onNavigate('logout');
+  };
+  const [myJobs, setMyJobs] = useState<any[]>([]);
+  const [myApplications, setMyApplications] = useState<ApplicationResponse[]>([]);
   const [employer, setEmployer] = useState<EmployerResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const totalViews = myJobs.reduce((sum, job) => sum + job.views, 0);
-  const totalApplications = myJobs.reduce((sum, job) => sum + job.applications, 0);
+  const totalViews = myJobs.reduce((sum, job) => sum + (job.views || 0), 0);
+  const totalApplications = myApplications.length;
 
-  // Check employer verification status on mount
+  // Fetch employer data and jobs on mount
   useEffect(() => {
-    const checkVerificationStatus = async () => {
+    const fetchData = async () => {
       if (!user || !token) return;
 
       try {
+        // Fetch employer data
         const employerData = await fetchEmployer(user.id, token);
         setEmployer(employerData);
 
@@ -48,6 +54,47 @@ export function EmployerDashboard({ onNavigate }: EmployerDashboardProps) {
           onNavigate('verification');
           return;
         }
+
+        // Fetch all jobs and filter by employer
+        const jobsResponse = await fetchJobs({ page: 0, size: 1000 });
+        const allJobs = jobsResponse.content || [];
+        
+        // Filter jobs by employer ID
+        const employerJobs = allJobs.filter((job: any) => {
+          // Check if job's organization matches employer's company name
+          // Or if there's an employerId field
+          return job.organization === employerData.companyName || 
+                 (job.employerId && job.employerId === employerData.id);
+        });
+        
+        setMyJobs(employerJobs);
+
+        // Fetch applications for employer's jobs
+        if (employerJobs.length > 0) {
+          try {
+            const jobIds = employerJobs.map((job: any) => job.id);
+            const allApplications: ApplicationResponse[] = [];
+            
+            // Fetch applications for each job
+            for (const jobId of jobIds) {
+              try {
+                const appsResponse = await fetchApplications({ jobId }, token);
+                if (appsResponse.content && Array.isArray(appsResponse.content)) {
+                  allApplications.push(...appsResponse.content);
+                }
+              } catch (err) {
+                console.error(`Failed to fetch applications for job ${jobId}:`, err);
+              }
+            }
+            
+            setMyApplications(allApplications);
+          } catch (error) {
+            console.error('Failed to fetch applications:', error);
+            setMyApplications([]);
+          }
+        } else {
+          setMyApplications([]);
+        }
       } catch (error) {
         console.error('Failed to fetch employer data:', error);
       } finally {
@@ -55,7 +102,7 @@ export function EmployerDashboard({ onNavigate }: EmployerDashboardProps) {
       }
     };
 
-    checkVerificationStatus();
+    fetchData();
   }, [user, token, onNavigate]);
 
   const handleEditJob = (jobId: string) => {
@@ -112,7 +159,7 @@ export function EmployerDashboard({ onNavigate }: EmployerDashboardProps) {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center justify-between mb-4">
             <Button
               variant="ghost"
               size="sm"
@@ -122,10 +169,19 @@ export function EmployerDashboard({ onNavigate }: EmployerDashboardProps) {
               <ArrowLeft className="w-4 h-4" />
               Go Back
             </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleLogout}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl text-gray-900 mb-2">{mockEmployer.companyName}</h1>
+              <h1 className="text-3xl text-gray-900 mb-2">{employer?.companyName || 'Employer Dashboard'}</h1>
               <p className="text-gray-600">Manage your job postings and applications</p>
             </div>
             <Button
@@ -242,41 +298,51 @@ export function EmployerDashboard({ onNavigate }: EmployerDashboardProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {myJobs.map((job) => (
-                      <TableRow key={job.id}>
-                        <TableCell>
-                          <div>
-                            <p className="text-gray-900">{job.title}</p>
-                            <p className="text-sm text-gray-500">{job.location}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>{job.category}</TableCell>
-                        <TableCell>{job.applications}</TableCell>
-                        <TableCell>{job.views}</TableCell>
-                        <TableCell>{new Date(job.postedDate).toLocaleDateString('en-IN')}</TableCell>
-                        <TableCell>
-                          <Badge className={
-                            job.status === 'active' ? 'bg-green-100 text-green-700 border-green-200' :
-                            job.status === 'pending' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                            'bg-gray-100 text-gray-700 border-gray-200'
-                          } variant="outline">
-                            {job.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" disabled className="cursor-not-allowed">
-                              <Edit className="w-4 h-4 mr-1" />
-                              Edit (Subscription Required)
-                            </Button>
-                            <Button variant="outline" size="sm" disabled className="cursor-not-allowed">
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Close (Subscription Required)
-                            </Button>
-                          </div>
+                    {myJobs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                          No jobs posted yet
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      myJobs.map((job) => {
+                        return (
+                          <TableRow key={job.id}>
+                            <TableCell>
+                              <div>
+                                <p className="text-gray-900">{job.title}</p>
+                                <p className="text-sm text-gray-500">{job.location}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>{job.category || 'N/A'}</TableCell>
+                            <TableCell>{job.applications || 0}</TableCell>
+                            <TableCell>{job.views || 0}</TableCell>
+                            <TableCell>{job.postedDate ? new Date(job.postedDate).toLocaleDateString('en-IN') : 'N/A'}</TableCell>
+                            <TableCell>
+                              <Badge className={
+                                job.status === 'active' ? 'bg-green-100 text-green-700 border-green-200' :
+                                job.status === 'pending' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                                'bg-gray-100 text-gray-700 border-gray-200'
+                              } variant="outline">
+                                {job.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button variant="outline" size="sm" disabled className="cursor-not-allowed">
+                                  <Edit className="w-4 h-4 mr-1" />
+                                  Edit (Subscription Required)
+                                </Button>
+                                <Button variant="outline" size="sm" disabled className="cursor-not-allowed">
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  Close (Subscription Required)
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -298,42 +364,49 @@ export function EmployerDashboard({ onNavigate }: EmployerDashboardProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {myApplications.map((application) => {
-                      const job = myJobs.find(j => j.id === application.jobId);
-                      return (
-                        <TableRow key={application.id}>
-                          <TableCell>
-                            <div>
-                              <p className="text-gray-900">{application.candidateName}</p>
-                              <p className="text-sm text-gray-500">{application.candidateEmail}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell>{job?.title}</TableCell>
-                          <TableCell>{new Date(application.appliedDate).toLocaleDateString('en-IN')}</TableCell>
-                          <TableCell>
-                            <Badge className={
-                              application.status === 'shortlisted' ? 'bg-green-100 text-green-700 border-green-200' :
-                              application.status === 'interview' ? 'bg-purple-100 text-purple-700 border-purple-200' :
-                              application.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
-                              'bg-gray-100 text-gray-700 border-gray-200'
-                            } variant="outline">
-                              {application.status}
-                            </Badge>
-                          </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" disabled className="cursor-not-allowed">
-                              View Resume (Subscription Required)
-                            </Button>
-                            <Button variant="outline" size="sm" disabled className="cursor-not-allowed">
-                              <Calendar className="w-4 h-4 mr-1" />
-                              Schedule (Subscription Required)
-                            </Button>
-                          </div>
+                    {myApplications.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-500 py-8">
+                          No applications found
                         </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                      </TableRow>
+                    ) : (
+                      myApplications.map((application) => {
+                        return (
+                          <TableRow key={application.id}>
+                            <TableCell>
+                              <div>
+                                <p className="text-gray-900">{application.candidateName}</p>
+                                <p className="text-sm text-gray-500">{application.candidateEmail}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>{application.jobTitle || 'N/A'}</TableCell>
+                            <TableCell>{application.appliedDate ? new Date(application.appliedDate).toLocaleDateString('en-IN') : 'N/A'}</TableCell>
+                            <TableCell>
+                              <Badge className={
+                                application.status === 'shortlisted' ? 'bg-green-100 text-green-700 border-green-200' :
+                                application.status === 'interview' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                                application.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
+                                'bg-gray-100 text-gray-700 border-gray-200'
+                              } variant="outline">
+                                {application.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button variant="outline" size="sm" disabled className="cursor-not-allowed">
+                                  View Resume (Subscription Required)
+                                </Button>
+                                <Button variant="outline" size="sm" disabled className="cursor-not-allowed">
+                                  <Calendar className="w-4 h-4 mr-1" />
+                                  Schedule (Subscription Required)
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
                   </TableBody>
                 </Table>
               </div>

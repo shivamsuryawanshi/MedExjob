@@ -8,56 +8,51 @@ export interface PulseUpdate {
   type: PulseType;
   date: string;
   breaking?: boolean;
+  createdAt?: string;
 }
 
-// Local fallback items so the UI always has content even if the API is down.
-const fallbackPulseUpdates: PulseUpdate[] = [
-  {
-    id: 'pulse-1',
-    title: 'NMC releases revised academic calendar for MBBS 2025 batch',
-    type: 'GOVT',
-    date: '2025-10-14',
-    breaking: true,
-  },
-  {
-    id: 'pulse-2',
-    title: 'AIIMS institutes common recruitment portal for Group A medical posts',
-    type: 'GOVT',
-    date: '2025-10-12',
-  },
-  {
-    id: 'pulse-3',
-    title: 'NBEMS announces tentative NEET-SS counseling window',
-    type: 'EXAM',
-    date: '2025-10-10',
-  },
-  {
-    id: 'pulse-4',
-    title: 'Private hospital chains open 1,200 resident doctor positions across metros',
-    type: 'PRIVATE',
-    date: '2025-10-08',
-  },
-  {
-    id: 'pulse-5',
-    title: 'Last date extended for DM/MCh registration under NMC portal',
-    type: 'DEADLINE',
-    date: '2025-10-06',
-  },
-  {
-    id: 'pulse-6',
-    title: 'ICMR updates guidance on antimicrobial stewardship in tertiary care',
-    type: 'UPDATE',
-    date: '2025-10-05',
-  },
-];
-
+// AI assisted development
 export async function fetchPulseUpdates(): Promise<PulseUpdate[]> {
   try {
     const res = await apiClient.get('/api/news/pulse');
     const data = res.data;
     if (Array.isArray(data) && data.length > 0) return data;
-    return fallbackPulseUpdates;
+    return [];
   } catch {
-    return fallbackPulseUpdates;
+    return [];
   }
+}
+
+// Admin: Get all news updates
+export async function fetchAllNews(): Promise<PulseUpdate[]> {
+  try {
+    const res = await apiClient.get('/api/news');
+    return Array.isArray(res.data) ? res.data : [];
+  } catch {
+    return [];
+  }
+}
+
+// Admin: Create news
+export interface NewsPayload {
+  title: string;
+  type: PulseType;
+  date: string; // yyyy-MM-dd
+  breaking?: boolean;
+}
+
+export async function createNews(payload: NewsPayload): Promise<PulseUpdate> {
+  const res = await apiClient.post('/api/news', payload);
+  return res.data;
+}
+
+// Admin: Update news
+export async function updateNews(id: string, payload: Partial<NewsPayload>): Promise<PulseUpdate> {
+  const res = await apiClient.put(`/api/news/${id}`, payload);
+  return res.data;
+}
+
+// Admin: Delete news
+export async function deleteNews(id: string): Promise<void> {
+  await apiClient.delete(`/api/news/${id}`);
 }

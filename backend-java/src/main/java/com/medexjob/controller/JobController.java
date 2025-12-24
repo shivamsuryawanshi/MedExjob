@@ -237,11 +237,13 @@ public class JobController {
 
     // Placeholder: Assumes JobStatus enum exists and has a valueOf method
     private Job.JobStatus parseStatus(String status) {
-        if (status == null) return null; // Handle null case if needed
+        if (status == null || status.isBlank()) {
+            return Job.JobStatus.PENDING; // keep admin submissions hidden by default
+        }
         try {
             return Job.JobStatus.valueOf(status.toUpperCase());
         } catch (IllegalArgumentException e) {
-            return Job.JobStatus.ACTIVE; // Default or throw
+            return Job.JobStatus.PENDING; // fall back to pending on invalid input
         }
     }
 

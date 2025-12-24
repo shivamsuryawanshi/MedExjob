@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Search, TrendingUp, Shield, Users, ChevronRight, MapPin, Briefcase as BriefcaseIcon, Building2, UserCheck, Calendar, Landmark, GraduationCap, AlarmClock, Sparkles } from 'lucide-react';
+import { Search, TrendingUp, Shield, Users, ChevronRight, MapPin, Briefcase as BriefcaseIcon, Building2, UserCheck, Calendar, Landmark, GraduationCap, AlarmClock, Sparkles, Newspaper } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { JobCard } from './JobCard';
+// AI assisted development
 import { fetchJobs, fetchJobsMeta } from '../api/jobs';
 import { fetchPulseUpdates, PulseUpdate } from '../api/news';
-import { mockJobs } from '../data/mockData';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { JobCategoryButtons } from './JobCategoryButtons';
 
@@ -68,36 +68,54 @@ export function HomePage({ onNavigate }: HomePageProps) {
   // Category buttons now provided by JobCategoryButtons component
 
   useEffect(() => {
-    // Load featured, government, private jobs and news
+    // Load featured, latest, government, private jobs and news
     (async () => {
       try {
-        const [feat, gov, priv, meta, news] = await Promise.all([
-          fetchJobs({ featured: true, size: 4 }).then(r => r.content ?? r),
-          fetchJobs({ sector: 'government', size: 3 }).then(r => r.content ?? r),
-          fetchJobs({ sector: 'private', size: 3 }).then(r => r.content ?? r),
+        const [feat, latest, gov, priv, meta, news] = await Promise.all([
+          fetchJobs({ featured: true, size: 6 }).then(r => r.content ?? []),
+          fetchJobs({ size: 6, sort: 'createdAt,desc' }).then(r => r.content ?? []),
+          fetchJobs({ sector: 'government', size: 3 }).then(r => r.content ?? []),
+          fetchJobs({ sector: 'private', size: 3 }).then(r => r.content ?? []),
           fetchJobsMeta(),
           fetchPulseUpdates(),
         ]);
 
-        const featList = Array.isArray(feat) && feat.length ? feat : mockJobs.filter(j => j.featured).slice(0, 4);
-        const govList = Array.isArray(gov) && gov.length ? gov : mockJobs.filter(j => j.sector === 'government').slice(0, 3);
-        const privList = Array.isArray(priv) && priv.length ? priv : mockJobs.filter(j => j.sector === 'private').slice(0, 3);
-        setFeaturedJobs(featList);
-        setGovernmentJobs(govList);
-        setPrivateJobs(privList);
+        // Combine featured and latest jobs, removing duplicates, limit to 6
+        const featuredArray = Array.isArray(feat) ? feat : [];
+        const latestArray = Array.isArray(latest) ? latest : [];
+        
+        // Create a map to track job IDs to avoid duplicates
+        const jobMap = new Map();
+        
+        // First add featured jobs
+        featuredArray.forEach(job => {
+          if (job.id) jobMap.set(job.id, job);
+        });
+        
+        // Then add latest jobs (up to 6 total)
+        latestArray.forEach(job => {
+          if (job.id && jobMap.size < 6) {
+            jobMap.set(job.id, job);
+          }
+        });
+        
+        // Convert map to array and limit to 6
+        const combinedJobs = Array.from(jobMap.values()).slice(0, 6);
+        setFeaturedJobs(combinedJobs);
+        
+        setGovernmentJobs(Array.isArray(gov) ? gov : []);
+        setPrivateJobs(Array.isArray(priv) ? priv : []);
         setNewsUpdates(Array.isArray(news) ? news.slice(0, 6) : []);
 
-        const locs: string[] = Array.isArray(meta?.locations) && meta.locations.length
-          ? meta.locations
-          : Array.from(new Set(mockJobs.map(j => j.location)));
+        const locs: string[] = Array.isArray(meta?.locations) ? meta.locations : [];
         setLocations(locs);
 
       } catch (e) {
-        // graceful fallback to mock data
-        setFeaturedJobs(mockJobs.filter(j => j.featured).slice(0, 4));
-        setGovernmentJobs(mockJobs.filter(j => j.sector === 'government').slice(0, 3));
-        setPrivateJobs(mockJobs.filter(j => j.sector === 'private').slice(0, 3));
-        setLocations(Array.from(new Set(mockJobs.map(j => j.location))));
+        // Set empty arrays on error, no mock data fallback
+        setFeaturedJobs([]);
+        setGovernmentJobs([]);
+        setPrivateJobs([]);
+        setLocations([]);
         setNewsUpdates([]);
       }
     })();
@@ -206,13 +224,13 @@ export function HomePage({ onNavigate }: HomePageProps) {
         </div>
       </section>
 
-      {/* Featured Jobs with Animations */}
+      {/* Latest Jobs with Animations */}
       <section className="py-16 relative">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h2 className="text-3xl text-gray-900 mb-2">Featured Jobs</h2>
-              <p className="text-gray-600">Top opportunities handpicked for you</p>
+              <h2 className="text-3xl text-gray-900 mb-2">Latest Jobs</h2>
+              <p className="text-gray-600">Latest job opportunities for you</p>
             </div>
             <Button 
               variant="outline" 
@@ -224,20 +242,31 @@ export function HomePage({ onNavigate }: HomePageProps) {
             </Button>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {featuredJobs.map((job, index) => (
-              <div 
-                key={job.id}
-                className="animate-fade-in-up"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <JobCard
-                  job={job}
-                  onViewDetails={(jobId) => onNavigate('job-detail', jobId)}
-                />
-              </div>
-            ))}
-          </div>
+          {featuredJobs.length > 0 ? (
+            <div className="grid md:grid-cols-2 gap-6">
+              {featuredJobs.map((job, index) => (
+                <div 
+                  key={job.id}
+                  className="animate-fade-in-up"
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <JobCard
+                    job={job}
+                    onViewDetails={(jobId) => onNavigate('job-detail', jobId)}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Card className="p-12 text-center">
+              <BriefcaseIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Jobs Available Yet</h3>
+              <p className="text-gray-600 mb-6">Check back soon for latest job opportunities</p>
+              <Button onClick={() => onNavigate('jobs')} variant="outline">
+                Browse All Jobs
+              </Button>
+            </Card>
+          )}
         </div>
       </section>
 
@@ -268,32 +297,39 @@ export function HomePage({ onNavigate }: HomePageProps) {
                   View All
                 </Button>
               </div>
-              <div className="space-y-4">
-                {governmentJobs.map((job, index) => (
-                  <Card 
-                    key={job.id} 
-                    className="p-5 hover:shadow-lg transition-all duration-300 cursor-pointer group border-l-4 border-l-blue-600 animate-fade-in-right" 
-                    onClick={() => onNavigate('job-detail', job.id)}
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-200 mb-3 group-hover:bg-blue-600 group-hover:text-white transition-colors" variant="outline">
-                      Government
-                    </Badge>
-                    <h3 className="text-lg text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{job.title}</h3>
-                    <p className="text-sm text-gray-600 mb-3 flex items-center">
-                      <Building2 className="w-4 h-4 mr-2" />
-                      {job.organization}
-                    </p>
-                    <div className="flex items-center justify-between text-sm text-gray-500">
-                      <span className="flex items-center">
-                        <MapPin className="w-4 h-4 mr-1" />
-                        {job.location}
-                      </span>
-                      <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full">{job.numberOfPosts} Posts</span>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+              {governmentJobs.length > 0 ? (
+                <div className="space-y-4">
+                  {governmentJobs.map((job, index) => (
+                    <Card 
+                      key={job.id} 
+                      className="p-5 hover:shadow-lg transition-all duration-300 cursor-pointer group border-l-4 border-l-blue-600 animate-fade-in-right" 
+                      onClick={() => onNavigate('job-detail', job.id)}
+                      style={{ animationDelay: `${index * 0.1}s` }}
+                    >
+                      <Badge className="bg-blue-100 text-blue-700 border-blue-200 mb-3 group-hover:bg-blue-600 group-hover:text-white transition-colors" variant="outline">
+                        Government
+                      </Badge>
+                      <h3 className="text-lg text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{job.title}</h3>
+                      <p className="text-sm text-gray-600 mb-3 flex items-center">
+                        <Building2 className="w-4 h-4 mr-2" />
+                        {job.organization}
+                      </p>
+                      <div className="flex items-center justify-between text-sm text-gray-500">
+                        <span className="flex items-center">
+                          <MapPin className="w-4 h-4 mr-1" />
+                          {job.location}
+                        </span>
+                        <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full">{job.numberOfPosts} Posts</span>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card className="p-8 text-center">
+                  <Landmark className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-600 text-sm">No government jobs available at the moment</p>
+                </Card>
+              )}
             </div>
 
             {/* Private Jobs */}
@@ -315,32 +351,39 @@ export function HomePage({ onNavigate }: HomePageProps) {
                   View All
                 </Button>
               </div>
-              <div className="space-y-4">
-                {privateJobs.map((job, index) => (
-                  <Card 
-                    key={job.id} 
-                    className="p-5 hover:shadow-lg transition-all duration-300 cursor-pointer group border-l-4 border-l-green-600 animate-fade-in-left" 
-                    onClick={() => onNavigate('job-detail', job.id)}
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    <Badge className="bg-green-100 text-green-700 border-green-200 mb-3 group-hover:bg-green-600 group-hover:text-white transition-colors" variant="outline">
-                      Private
-                    </Badge>
-                    <h3 className="text-lg text-gray-900 mb-2 group-hover:text-green-600 transition-colors">{job.title}</h3>
-                    <p className="text-sm text-gray-600 mb-3 flex items-center">
-                      <Building2 className="w-4 h-4 mr-2" />
-                      {job.organization}
-                    </p>
-                    <div className="flex items-center justify-between text-sm text-gray-500">
-                      <span className="flex items-center">
-                        <MapPin className="w-4 h-4 mr-1" />
-                        {job.location}
-                      </span>
-                      <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full">{job.salary}</span>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+              {privateJobs.length > 0 ? (
+                <div className="space-y-4">
+                  {privateJobs.map((job, index) => (
+                    <Card 
+                      key={job.id} 
+                      className="p-5 hover:shadow-lg transition-all duration-300 cursor-pointer group border-l-4 border-l-green-600 animate-fade-in-left" 
+                      onClick={() => onNavigate('job-detail', job.id)}
+                      style={{ animationDelay: `${index * 0.1}s` }}
+                    >
+                      <Badge className="bg-green-100 text-green-700 border-green-200 mb-3 group-hover:bg-green-600 group-hover:text-white transition-colors" variant="outline">
+                        Private
+                      </Badge>
+                      <h3 className="text-lg text-gray-900 mb-2 group-hover:text-green-600 transition-colors">{job.title}</h3>
+                      <p className="text-sm text-gray-600 mb-3 flex items-center">
+                        <Building2 className="w-4 h-4 mr-2" />
+                        {job.organization}
+                      </p>
+                      <div className="flex items-center justify-between text-sm text-gray-500">
+                        <span className="flex items-center">
+                          <MapPin className="w-4 h-4 mr-1" />
+                          {job.location}
+                        </span>
+                        <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full">{job.salary}</span>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card className="p-8 text-center">
+                  <BriefcaseIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-600 text-sm">No private jobs available at the moment</p>
+                </Card>
+              )}
             </div>
           </div>
         </div>
@@ -379,9 +422,10 @@ export function HomePage({ onNavigate }: HomePageProps) {
             </div>
 
             {/* News Grid */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(() => {
-                const cardMeta: Record<string, { label: string; badge: string; ring: string; bg: string; hover: string; sub: string; icon: any; iconBg: string; iconColor: string; iconRing: string; border: string; hoverBorder: string; accent: string }> = {
+            {newsUpdates.length > 0 ? (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {(() => {
+                  const cardMeta: Record<string, { label: string; badge: string; ring: string; bg: string; hover: string; sub: string; icon: any; iconBg: string; iconColor: string; iconRing: string; border: string; hoverBorder: string; accent: string }> = {
                   GOVT: { label: 'Government', badge: 'bg-blue-100 text-blue-800 border-blue-200', ring: 'ring-blue-100', bg: 'from-blue-50 to-white', hover: 'hover:shadow-[0_20px_48px_-28px_rgba(59,130,246,0.45)]', sub: 'Govt notice', icon: Landmark, iconBg: 'from-blue-500/25 via-blue-400/15 to-blue-300/15', iconColor: 'text-blue-700', iconRing: 'ring-blue-200/70', border: 'border-blue-200', hoverBorder: 'hover:border-blue-300', accent: 'from-blue-500 to-blue-300' },
                   EXAM: { label: 'Exam', badge: 'bg-purple-100 text-purple-800 border-purple-200', ring: 'ring-purple-100', bg: 'from-purple-50 to-white', hover: 'hover:shadow-[0_20px_48px_-28px_rgba(126,34,206,0.45)]', sub: 'Exam update', icon: GraduationCap, iconBg: 'from-purple-500/25 via-purple-400/15 to-purple-300/15', iconColor: 'text-purple-700', iconRing: 'ring-purple-200/70', border: 'border-purple-200', hoverBorder: 'hover:border-purple-300', accent: 'from-purple-500 to-purple-300' },
                   PRIVATE: { label: 'Private', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', ring: 'ring-emerald-100', bg: 'from-emerald-50 to-white', hover: 'hover:shadow-[0_20px_48px_-28px_rgba(16,185,129,0.45)]', sub: 'Private sector', icon: BriefcaseIcon, iconBg: 'from-emerald-500/25 via-emerald-400/15 to-emerald-300/15', iconColor: 'text-emerald-700', iconRing: 'ring-emerald-200/70', border: 'border-emerald-200', hoverBorder: 'hover:border-emerald-300', accent: 'from-emerald-500 to-emerald-300' },
@@ -455,7 +499,17 @@ export function HomePage({ onNavigate }: HomePageProps) {
                   );
                 });
               })()}
-            </div>
+              </div>
+            ) : (
+              <Card className="p-12 text-center">
+                <Newspaper className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No News Updates Yet</h3>
+                <p className="text-gray-600 mb-6">Check back soon for the latest medical news and updates</p>
+                <Button variant="outline" onClick={() => onNavigate('news')}>
+                  View News Page
+                </Button>
+              </Card>
+            )}
           </div>
         </section>
       )}

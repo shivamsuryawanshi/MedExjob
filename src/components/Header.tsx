@@ -1,4 +1,5 @@
-import { Bell, User, Menu, Briefcase } from 'lucide-react';
+// AI assisted development
+import { Bell, User, Menu, Briefcase, LogOut } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 
@@ -13,10 +14,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { mockNotifications } from '../data/mockData';
 
 export function Header({ currentPage, onNavigate, isAuthenticated, userRole }: HeaderProps) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const unreadCount = isAuthenticated && user
     ? mockNotifications.filter(n => n.userId === user.id && !n.read).length
     : 0;
+
+  const handleLogout = () => {
+    logout();
+    onNavigate('logout');
+  };
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-white">
       <div className="container mx-auto px-4">
@@ -108,8 +114,21 @@ export function Header({ currentPage, onNavigate, isAuthenticated, userRole }: H
                   variant="ghost"
                   size="icon"
                   onClick={() => onNavigate('dashboard')}
+                  title="Dashboard"
                 >
                   <User className="w-5 h-5" />
+                </Button>
+
+                {/* Logout Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                  title="Logout"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  <span className="hidden sm:inline">Logout</span>
                 </Button>
               </>
             ) : (

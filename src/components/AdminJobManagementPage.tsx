@@ -105,6 +105,53 @@ export function AdminJobManagementPage({ onNavigate }: AdminJobManagementPagePro
     onNavigate('admin-post-job');
   };
 
+  const handleQuickAddSampleJob = async () => {
+    if (!window.confirm('क्या आप एक sample job add करना चाहते हैं?')) return;
+    
+    setLoading(true);
+    setError(null);
+    try {
+      if (!token) throw new Error('Authentication token not found.');
+      
+      // Sample job data
+      const sampleJob = {
+        title: 'Senior Medical Officer',
+        organization: 'AIIMS Delhi',
+        sector: 'government' as JobSector,
+        category: 'Medical Officer' as JobCategory,
+        location: 'New Delhi',
+        qualification: 'MBBS with MD/MS',
+        experience: '5+ years',
+        experienceLevel: 'senior' as const,
+        speciality: 'General Medicine',
+        dutyType: 'full_time' as const,
+        numberOfPosts: 10,
+        salary: '₹80,000 - ₹1,20,000 per month',
+        description: 'We are looking for experienced Senior Medical Officers to join our team. The candidate should have excellent clinical skills and a passion for patient care.',
+        lastDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+        requirements: 'MBBS with MD/MS in relevant field, Valid medical license, 5+ years of clinical experience, Good communication skills',
+        benefits: 'Health insurance, Provident Fund, Paid leaves, Professional development opportunities',
+        contactEmail: 'hr@aiims.edu',
+        contactPhone: '+91-11-26588500',
+        status: 'active' as const,
+        featured: true,
+        views: 0,
+        applications: 0,
+        type: 'hospital'
+      };
+
+      await createJob(sampleJob);
+      alert('Sample job successfully added! 🎉');
+      loadJobs(); // Refresh the list
+    } catch (e: any) {
+      setError(`Failed to add sample job: ${e.message}`);
+      console.error("Error adding sample job:", e);
+      alert(`Error: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEditJob = (job: Job) => {
     setEditingJob(job);
   };
@@ -164,7 +211,7 @@ export function AdminJobManagementPage({ onNavigate }: AdminJobManagementPagePro
 
       const payload = {
         ...jobData,
-        status: jobData.status || 'active', // Default to 'active' so it appears in All Jobs immediately
+        status: jobData.status || 'pending', // keep new jobs hidden until approved
         featured: jobData.featured || false, // Admin can set featured, default to false
         views: jobData.views || 0,
         applications: jobData.applications || 0,
@@ -173,10 +220,10 @@ export function AdminJobManagementPage({ onNavigate }: AdminJobManagementPagePro
 
       if (editingJob) {
         if (!token) throw new Error('Authentication token not found.');
-        await updateJob(editingJob.id, payload, token);
+        await updateJob(editingJob.id, payload);
       } else {
         if (!token) throw new Error('Authentication token not found.');
-        await createJob(payload, token);
+        await createJob(payload);
       }
       alert(`Job ${editingJob ? 'updated' : 'created'} successfully!`);
       loadJobs(); // Refresh the list after save
@@ -242,10 +289,21 @@ export function AdminJobManagementPage({ onNavigate }: AdminJobManagementPagePro
               <SelectItem value="closed">Closed</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={handleCreateNewJob} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2" />
-            Create New Job
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleCreateNewJob} className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="w-4 h-4 mr-2" />
+              Create New Job
+            </Button>
+            <Button 
+              onClick={handleQuickAddSampleJob} 
+              variant="outline" 
+              className="border-green-600 text-green-600 hover:bg-green-50"
+              disabled={loading}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Quick Add Sample Job
+            </Button>
+          </div>
         </div>
 
         {/* Job List */}

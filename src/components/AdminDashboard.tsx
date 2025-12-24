@@ -1,12 +1,21 @@
-import { BarChart, Briefcase, Users, Building2, Bell, Settings } from 'lucide-react';
+// AI assisted development
+import { BarChart, Briefcase, Users, Building2, Bell, Settings, LogOut, Newspaper } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AdminDashboardProps {
   onNavigate: (page: string) => void;
 }
 
 export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    onNavigate('logout');
+  };
+
   const adminCards = [
     {
       title: 'Manage Jobs',
@@ -39,6 +48,12 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
       action: () => onNavigate('analytics'),
     },
     {
+      title: 'Manage News',
+      description: 'Create, edit, and delete news updates and announcements.',
+      icon: <Newspaper className="w-8 h-8 text-indigo-600" />,
+      action: () => onNavigate('admin-news'),
+    },
+    {
       title: 'Notifications & Alerts',
       description: 'Send global notifications or manage system alerts.',
       icon: <Bell className="w-8 h-8 text-red-600" />,
@@ -60,9 +75,19 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
             <h1 className="text-3xl text-gray-900 mb-2">Admin Dashboard</h1>
             <p className="text-gray-600">Welcome, Administrator! Manage your MedExJob.com platform here.</p>
           </div>
-          <Button variant="outline" onClick={() => onNavigate('home')}>
-            Back to Home
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => onNavigate('home')}>
+              Back to Home
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleLogout}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

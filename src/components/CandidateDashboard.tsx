@@ -1,28 +1,137 @@
-import { Briefcase, BookmarkIcon, Bell, User, FileText, TrendingUp, ArrowLeft, Trash2, Heart } from 'lucide-react';
+// AI assisted development
+import { Briefcase, BookmarkIcon, Bell, User, FileText, TrendingUp, ArrowLeft, Trash2, Heart, LogOut } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { mockJobs, mockCandidate, mockNotifications } from '../data/mockData';
 import { Progress } from './ui/progress';
 import { useAuth } from '../contexts/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { fetchApplications, ApplicationResponse } from '../api/applications';
+import { fetchJobs } from '../api/jobs';
 
 interface CandidateDashboardProps {
   onNavigate: (page: string, jobId?: string) => void;
 }
 
 export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
-  const { user } = useAuth();
-  const [savedJobs, setSavedJobs] = useState(mockJobs.filter(job => mockCandidate.savedJobs.includes(job.id)));
-  const [appliedJobs, setAppliedJobs] = useState([
-    { ...mockJobs[0], status: 'under_review', appliedDate: '2025-10-12' },
-    { ...mockJobs[2], status: 'shortlisted', appliedDate: '2025-10-10' },
-    { ...mockJobs[5], status: 'interview', appliedDate: '2025-10-08', interviewDate: '2025-10-20' },
-  ]);
-
-  const notifications = mockNotifications.filter(n => n.userId === mockCandidate.id);
+  const { user, logout, token } = useAuth();
+  const [savedJobs, setSavedJobs] = useState<any[]>([]);
+  const [appliedJobs, setAppliedJobs] = useState<any[]>([]);
+  const [recommendedJobs, setRecommendedJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const profileCompleteness = 75;
+
+  const handleLogout = () => {
+    logout();
+    onNavigate('logout');
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [user, token]);
+
+  const loadDashboardData = async () => {
+    if (!user || !token) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Fetch user's applications - handle errors gracefully
+      let applications: ApplicationResponse[] = [];
+      try {
+        const applicationsData = await fetchApplications({ candidateId: user.id }, token);
+        applications = applicationsData?.content || [];
+      } catch (error: any) {
+        console.error('Error fetching applications:', error);
+        // If 500 error or any error, just set empty array
+        applications = [];
+      }
+      
+      // Map applications to jobs with status - only if we have applications
+      if (applications.length > 0) {
+        const appliedJobsWithDetails = await Promise.all(
+          applications.map(async (app: ApplicationResponse) => {
+            try {
+              // Try to fetch job details by ID first
+              let job = null;
+              try {
+                const jobData = await fetchJobs({ search: app.jobTitle, size: 1 });
+                job = Array.isArray(jobData?.content) ? jobData.content[0] : null;
+              } catch {
+                // If search fails, use fallback
+              }
+              
+              if (job) {
+                return {
+                  ...job,
+                  status: app.status === 'applied' ? 'under_review' : app.status,
+                  appliedDate: app.appliedDate,
+                  interviewDate: app.interviewDate,
+                };
+              }
+              
+              // Fallback if job not found
+              return {
+                id: app.jobId,
+                title: app.jobTitle,
+                organization: app.jobOrganization,
+                sector: 'private' as const,
+                status: app.status === 'applied' ? 'under_review' : app.status,
+                appliedDate: app.appliedDate,
+                interviewDate: app.interviewDate,
+              };
+            } catch (error) {
+              console.error('Error processing application:', error);
+              // Return minimal job data
+              return {
+                id: app.jobId,
+                title: app.jobTitle,
+                organization: app.jobOrganization,
+                sector: 'private' as const,
+                status: app.status === 'applied' ? 'under_review' : app.status,
+                appliedDate: app.appliedDate,
+                interviewDate: app.interviewDate,
+              };
+            }
+          })
+        );
+        
+        setAppliedJobs(appliedJobsWithDetails);
+      } else {
+        // No applications found
+        setAppliedJobs([]);
+      }
+
+      // For now, saved jobs and recommended jobs are empty for new users
+      // In future, these can be fetched from backend
+      setSavedJobs([]);
+      
+      // Fetch recommended jobs (featured or recent jobs)
+      try {
+        const recommendedData = await fetchJobs({ featured: true, size: 3 });
+        setRecommendedJobs(Array.isArray(recommendedData?.content) ? recommendedData.content : []);
+      } catch (error) {
+        console.error('Error fetching recommended jobs:', error);
+        setRecommendedJobs([]);
+      }
+
+      // Notifications - for now empty, can be fetched from backend later
+      setNotifications([]);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      // Set empty arrays on error
+      setAppliedJobs([]);
+      setSavedJobs([]);
+      setRecommendedJobs([]);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRemoveSavedJob = (jobId: string) => {
     setSavedJobs(prev => prev.filter(job => job.id !== jobId));
@@ -42,7 +151,7 @@ export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center justify-between mb-4">
             <Button
               variant="ghost"
               size="sm"
@@ -52,8 +161,17 @@ export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
               <ArrowLeft className="w-4 h-4" />
               Go Back
             </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleLogout}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
           </div>
-          <h1 className="text-3xl text-gray-900 mb-2">Welcome, {user?.name || mockCandidate.name}</h1>
+          <h1 className="text-3xl text-gray-900 mb-2">Welcome, {user?.name || 'User'}</h1>
           <p className="text-gray-600">Manage your job applications and profile</p>
         </div>
 
@@ -87,7 +205,7 @@ export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 mb-1">Interviews</p>
-                <p className="text-3xl text-gray-900">1</p>
+                <p className="text-3xl text-gray-900">{appliedJobs.filter(job => job.status === 'interview' || job.interviewDate).length}</p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
                 <TrendingUp className="w-6 h-6 text-purple-600" />
@@ -99,7 +217,7 @@ export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 mb-1">Profile Views</p>
-                <p className="text-3xl text-gray-900">24</p>
+                <p className="text-3xl text-gray-900">0</p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
                 <User className="w-6 h-6 text-orange-600" />
@@ -119,7 +237,18 @@ export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
               </TabsList>
 
               <TabsContent value="applied" className="space-y-4 mt-6">
-                {appliedJobs.map((job) => (
+                {loading ? (
+                  <div className="text-center py-8 text-gray-500">Loading applications...</div>
+                ) : appliedJobs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-600">You haven't applied for any jobs yet.</p>
+                    <Button className="mt-4" onClick={() => onNavigate('jobs')}>
+                      Browse Jobs
+                    </Button>
+                  </div>
+                ) : (
+                  appliedJobs.map((job) => (
                   <Card key={job.id} className="p-6">
                     <div className="space-y-4">
                       <div className="flex items-start justify-between">
@@ -175,11 +304,23 @@ export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
                       </div>
                     </div>
                   </Card>
-                ))}
+                  ))
+                )}
               </TabsContent>
 
               <TabsContent value="saved" className="space-y-4 mt-6">
-                {savedJobs.map((job) => (
+                {loading ? (
+                  <div className="text-center py-8 text-gray-500">Loading saved jobs...</div>
+                ) : savedJobs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <BookmarkIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-600">You haven't saved any jobs yet.</p>
+                    <Button className="mt-4" onClick={() => onNavigate('jobs')}>
+                      Browse Jobs
+                    </Button>
+                  </div>
+                ) : (
+                  savedJobs.map((job) => (
                   <Card key={job.id} className="p-6">
                     <div className="space-y-4">
                       <div className="flex items-start justify-between">
@@ -212,12 +353,24 @@ export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
                       </div>
                     </div>
                   </Card>
-                ))}
+                  ))
+                )}
               </TabsContent>
 
               <TabsContent value="recommended" className="space-y-4 mt-6">
                 <p className="text-gray-600">Based on your profile and preferences, here are jobs we recommend:</p>
-                {mockJobs.slice(0, 3).map((job) => (
+                {loading ? (
+                  <div className="text-center py-8 text-gray-500">Loading recommended jobs...</div>
+                ) : recommendedJobs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-600">No recommended jobs at the moment.</p>
+                    <Button className="mt-4" onClick={() => onNavigate('jobs')}>
+                      Browse All Jobs
+                    </Button>
+                  </div>
+                ) : (
+                  recommendedJobs.map((job) => (
                   <Card key={job.id} className="p-6">
                     <div className="space-y-4">
                       <div className="flex items-start justify-between">
@@ -250,7 +403,8 @@ export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
                       </div>
                     </div>
                   </Card>
-                ))}
+                  ))
+                )}
               </TabsContent>
             </Tabs>
           </div>
@@ -297,14 +451,18 @@ export function CandidateDashboard({ onNavigate }: CandidateDashboardProps) {
             <Card className="p-6">
               <h3 className="text-lg text-gray-900 mb-4">Recent Notifications</h3>
               <div className="space-y-3">
-                {notifications.slice(0, 3).map((notification) => (
-                  <div key={notification.id} className="pb-3 border-b last:border-b-0">
-                    <p className="text-sm text-gray-900 mb-1">{notification.message}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(notification.createdAt).toLocaleDateString('en-IN')}
-                    </p>
-                  </div>
-                ))}
+                {notifications.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">No notifications yet</p>
+                ) : (
+                  notifications.slice(0, 3).map((notification) => (
+                    <div key={notification.id} className="pb-3 border-b last:border-b-0">
+                      <p className="text-sm text-gray-900 mb-1">{notification.message}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(notification.createdAt).toLocaleDateString('en-IN')}
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
               <Button 
                 variant="link" 

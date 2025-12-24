@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+// AI assisted development
+import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, Phone, Building2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -14,11 +16,14 @@ interface AuthPageProps {
 }
 
 export function AuthPage({ mode, onNavigate }: AuthPageProps) {
+  const navigate = useNavigate();
   const { login, register } = useAuth();
   const [userRole, setUserRole] = useState<'candidate' | 'employer' | 'admin'>('candidate');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
+  const lastSubmitTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (mode === 'login') {
@@ -28,34 +33,87 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
         localStorage.removeItem('registrationSuccess');
       }
     }
+    // Reset submission ref when mode changes
+    isSubmittingRef.current = false;
+    setLoading(false);
   }, [mode]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isSubmittingRef.current = false;
+    };
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    const now = Date.now();
+    // Prevent double submission - check ref, loading state, and timestamp
+    if (isSubmittingRef.current || loading) {
+      return;
+    }
+    
+    // Debounce: prevent submission if last submission was less than 500ms ago
+    if (now - lastSubmitTimeRef.current < 500) {
+      return;
+    }
+    
+    lastSubmitTimeRef.current = now;
+    isSubmittingRef.current = true;
     setLoading(true);
     setErrors({});
 
-    const formData = new FormData(e.target as HTMLFormElement);
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const email = (formData.get('email') as string)?.trim() || '';
+    const password = (formData.get('password') as string)?.trim() || '';
+
+    if (!email || !password) {
+      setErrors({ form: 'Please enter both email and password.' });
+      setLoading(false);
+      isSubmittingRef.current = false;
+      return;
+    }
 
     try {
       const loggedInUser = await login(email, password);
+      // Small delay to ensure state is updated before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
       // Navigate to dashboard without role parameter
       onNavigate('dashboard');
     } catch (err: any) {
       setErrors({ form: err.message || 'Login failed. Please check your credentials.' });
+      isSubmittingRef.current = false;
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    const now = Date.now();
+    // Prevent double submission - check ref, loading state, and timestamp
+    if (isSubmittingRef.current || loading) {
+      return;
+    }
+    
+    // Debounce: prevent submission if last submission was less than 500ms ago
+    if (now - lastSubmitTimeRef.current < 500) {
+      return;
+    }
+    
+    lastSubmitTimeRef.current = now;
+    isSubmittingRef.current = true;
     setLoading(true);
     setErrors({});
+    setSuccessMessage(null);
 
-    const formData = new FormData(e.target as HTMLFormElement);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
     const userData = {
       name: formData.get('name') as string,
       email: formData.get('email') as string,
@@ -67,15 +125,23 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
 
     try {
       await register(userData);
+      // Show success message
+      setSuccessMessage('Registration successful! Redirecting to login...');
+      // Show alert
+      alert('Registration successful! You can now log in with your credentials.');
       // Mark success and redirect to login to show a success message
       localStorage.setItem('registrationSuccess', '1');
-      onNavigate('login');
+      // Wait a bit to show the success message, then redirect using navigate directly
+      setTimeout(() => {
+        navigate('/login');
+      }, 1500);
     } catch (err: any) {
       if (err.errors) {
         setErrors(err.errors);
       } else {
         setErrors({ form: err.message || 'Registration failed. Please try again.' });
       }
+      isSubmittingRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -103,7 +169,7 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
                 {successMessage}
               </div>
             )}
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4" noValidate>
               <div>
                 <Label htmlFor="email">Email</Label>
                 <div className="relative mt-1">
@@ -153,7 +219,11 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
               </div>
 
               {errors.form && <p className="text-red-500 text-sm">{errors.form}</p>}
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={loading}>
+              <Button 
+                type="submit" 
+                className="w-full bg-blue-600 hover:bg-blue-700" 
+                disabled={loading || isSubmittingRef.current}
+              >
                 {loading ? 'Logging in...' : 'Login'}
               </Button>
 
@@ -166,7 +236,15 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
           </TabsContent>
 
           <TabsContent value="register" className="space-y-4 mt-6">
-            <form onSubmit={handleRegister} className="space-y-4">
+            {successMessage && (
+              <div className="text-green-700 bg-green-100 border border-green-200 rounded px-3 py-2 text-sm flex items-center gap-2">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                {successMessage}
+              </div>
+            )}
+            <form onSubmit={handleRegister} className="space-y-4" noValidate>
               <div>
                 <Label>I want to register as</Label>
                 <RadioGroup value={userRole} onValueChange={(value) => setUserRole(value as 'candidate' | 'employer' | 'admin')} className="mt-2">
@@ -273,7 +351,17 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
               </div>
 
               {errors.form && <p className="text-red-500 text-sm">{errors.form}</p>}
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={loading}>
+              <Button 
+                type="submit" 
+                className="w-full bg-blue-600 hover:bg-blue-700" 
+                disabled={loading || isSubmittingRef.current}
+                onClick={(e) => {
+                  if (loading || isSubmittingRef.current) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+                }}
+              >
                 {loading ? 'Creating Account...' : 'Create Account'}
               </Button>
 

@@ -1,6 +1,8 @@
+// AI assisted development
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
+import { createJob } from './api/jobs';
 
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -21,6 +23,7 @@ import { JobPostingForm } from './components/JobPostingForm';
 import { AdminUsersPage } from './components/AdminUsersPage';
 import { EmployerVerificationPage } from './components/EmployerVerificationPage';
 import { AdminApplications } from './components/AdminApplications';
+import { AdminNewsManagementPage } from './components/AdminNewsManagementPage';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { NotificationCenter } from './components/NotificationCenter';
 import { SubscriptionPage } from './components/SubscriptionPage';
@@ -30,7 +33,7 @@ import { NewsPage } from './components/NewsPage';
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, user, logout, token } = useAuth();
   const [currentPage, setCurrentPage] = useState(location.pathname.substring(1) || 'home');
 
   useEffect(() => {
@@ -107,7 +110,34 @@ function AppContent() {
               {/* Admin Routes */}
               <Route path="/dashboard/admin" element={<AdminDashboard onNavigate={handleNavigate} />} />
               <Route path="/admin-jobs" element={<AdminJobManagementPage onNavigate={handleNavigate} />} />
-              <Route path="/admin-post-job" element={<JobPostingForm onCancel={() => handleNavigate('admin-jobs')} onSave={() => {}} />} />
+              <Route path="/admin-news" element={<AdminNewsManagementPage onNavigate={handleNavigate} />} />
+              <Route path="/admin-post-job" element={
+                <JobPostingForm 
+                  onCancel={() => handleNavigate('admin-jobs')} 
+                  onSave={async (jobData: any) => {
+                    try {
+                      if (!token) {
+                        alert('Authentication token not found. Please login again.');
+                        return;
+                      }
+                      const payload = {
+                        ...jobData,
+                        status: jobData.status || 'active',
+                        featured: jobData.featured || false,
+                        views: jobData.views || 0,
+                        applications: jobData.applications || 0,
+                        type: 'hospital'
+                      };
+                      await createJob(payload);
+                      alert('Job created successfully!');
+                      handleNavigate('admin-jobs');
+                    } catch (e: any) {
+                      console.error("Error creating job:", e);
+                      alert(`Error creating job: ${e.message}`);
+                    }
+                  }} 
+                />
+              } />
               <Route path="/profile" element={<ProfilePage onNavigate={handleNavigate} />} />
               <Route path="/admin-users" element={<AdminUsersPage onNavigate={handleNavigate} />} />
               <Route path="/admin-employer-verification" element={<EmployerVerificationPage onNavigate={handleNavigate} />} />
